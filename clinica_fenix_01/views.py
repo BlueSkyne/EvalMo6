@@ -1,65 +1,32 @@
 from django.shortcuts import render, redirect 
 from django.conf import settings
-from .forms import IngresoUsuario, FormularioUsuario, ContactForm
+#from .forms import ContactForm
 import json
 from .models import Usuario, Examen
 from django.urls import reverse_lazy
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic import View
-import requests
+#import requests
 from django.core.mail import EmailMessage
-from django.shortcuts import render, redirect
-from django.conf import settings
-import random
+#from django.shortcuts import render, redirect
+#import random
 from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
+from django.views import generic
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
+from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.mixins import PermissionRequiredMixin
+
 
 def inicio(request):
-    formulario = ContactForm(request.POST or None)
-    context = {'form':formulario}
-    if request.method == "POST":
-        formulario = ContactForm(request.POST)
-        if formulario.is_valid():
-            infoform = formulario.cleaned_data
-            filename = "\clinica_fenix_01\static\clinica_fenix_01\data\contactos.json"
-            with open(str(settings.BASE_DIR)+filename, "r") as file:
-                usuario = json.load(file)
-            infoform['id'] = usuario['ultimo_id_generado'] + 1
-            usuario['ultimo_id_generado'] = infoform['id']
-            usuario['usuario'].append(infoform)
-            with open(str(settings.BASE_DIR)+filename, 'w') as file:
-                json.dump(usuario, file)
-            asunto = infoform['asunto']
-            nombre = infoform['name']
-            emailcontacto = infoform['email']
-            message = infoform['message']
-            respuesta = ['Hola ', nombre,'. \n Hemos recibido tu mensaje:\n \n',
-                        message, '\n \n Pronto nuestro equipo se pondrá en contacto con usted al correo indicado: \n \n',
-                        emailcontacto, '\n \n Saludos del equipo. \n Clinica Fenix S.A.']
-            respuesta = "".join(map(str, respuesta))   
-            email = EmailMessage(asunto, respuesta, to=[emailcontacto])
-            emaily = EmailMessage('Correo de Prueba desde Django', 'Enviando correo de prueba', to=['Fnoguerav25@gmail.com'])  
-            email.send()
-            return redirect('clinica_fenix_01:index')     
-    return render(request, 'clinica_fenix_01/index.html',context)
+    return render(request, 'clinica_fenix_01/index.html')
 
-def login(request):
-    formulario = IngresoUsuario(request.POST or None)
-    context = {'form':formulario}
-    if formulario.is_valid():
-        form_data = formulario.cleaned_data
-        filename = "/clinica_fenix_01/static/clinica_fenix_01/data/usuario.json"
-        with open(str(settings.BASE_DIR)+filename, 'r') as file:
-            usuario=json.load(file)
-        if (form_data['usuario'] == usuario['usuario']) and (form_data['clave'] == usuario['clave']):
-            return redirect('clinica_fenix_01:portal_privado')               
-        else:
-            return redirect('clinica_fenix_01:login')               
-    return render(request, 'clinica_fenix_01/registro.html',context)
-
+@login_required(login_url='/accounts/login/')
 def private_page(request):
     dic1 = {}
-    dic2 = {}
     edad = []
     apellidos = []
     usuarios = Usuario.objects.all().values()
@@ -72,26 +39,38 @@ def private_page(request):
                 apellidos.append(value)
             else:
                 continue
-    context = {'edad': edad, 'nombre':apellidos , 'usuarios': usuarios}
+
+    try:
+        usuario_id = request.user.id #OBTENER ID DEL USUARIO QUE ESTA VISITANDO LA VISTA
+        perfil = Usuario.objects.filter(usuario_id=usuario_id).values()[0]
+    except:
+        perfil= 0
+
+    context = {'edad': edad, 'nombre':apellidos , 'usuarios': usuarios,'my_id':usuario_id, 'perfil':perfil }
     return render(request, 'clinica_fenix_01/PagePrivate.html', context)
 
 
-class ListaPacientes(ListView):
+class ListaPacientes(LoginRequiredMixin, PermissionRequiredMixin,ListView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model= Usuario
     template_name= "clinica_fenix_01/lista_usuario.html"
     context_object_name = "Usuario"
     #extra_context = {'usuario': usuarios }
 
 
-
-class CrearUsuario(CreateView):
+class CrearUsuario(LoginRequiredMixin,PermissionRequiredMixin,CreateView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model = Usuario
     template_name= "clinica_fenix_01/new_user.html"
     fields = '__all__'
     success_url = reverse_lazy('clinica_fenix_01:lista_usuario')
 
 
-class EliminarPaciente(DeleteView):
+class EliminarPaciente(LoginRequiredMixin,PermissionRequiredMixin,DeleteView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model = Usuario
     template_name= "clinica_fenix_01/eliminar_cliente.html"
     context_object_name = "Usuario"
@@ -99,28 +78,36 @@ class EliminarPaciente(DeleteView):
     success_url = reverse_lazy('clinica_fenix_01:lista_usuario')
 
 
-class EditarPaciente(UpdateView):
+class EditarPaciente(LoginRequiredMixin,PermissionRequiredMixin,UpdateView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model = Usuario
     template_name= "clinica_fenix_01/editar_cliente.html"
     fields = '__all__'
     success_url = reverse_lazy('clinica_fenix_01:lista_usuario')
 
     
-class ListaExamenes(ListView):
+class ListaExamenes(LoginRequiredMixin,PermissionRequiredMixin,ListView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model= Examen
     template_name= "clinica_fenix_01/lista_examen.html"
     context_object_name = "Examenes"
     #extra_context = {''}
 
 
-class CrearExamen(CreateView):
+class CrearExamen(LoginRequiredMixin,PermissionRequiredMixin,CreateView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model = Examen
     template_name= "clinica_fenix_01/new_examen.html"
     fields = '__all__'
     success_url = reverse_lazy('clinica_fenix_01:lista_examen')
 
 
-class EliminarExamen(DeleteView):
+class EliminarExamen(LoginRequiredMixin,PermissionRequiredMixin,DeleteView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
+    login_url= 'clinica_fenix_01:index'
     model = Examen
     template_name= "clinica_fenix_01/eliminar_examen.html"
     context_object_name = "Examenes"
@@ -128,12 +115,14 @@ class EliminarExamen(DeleteView):
     success_url = reverse_lazy('clinica_fenix_01:lista_examen')
 
 
-class EditarExamen(UpdateView):
+class EditarExamen(LoginRequiredMixin,PermissionRequiredMixin,UpdateView):
+    permission_required = 'user.Usuario.rol=ADMINISTRADOR'
     model = Examen
     template_name= "clinica_fenix_01/editar_examen.html"
     fields = '__all__'
     success_url = reverse_lazy('clinica_fenix_01:lista_examen')
 
+@login_required(login_url='/accounts/login/')
 def examen_cliente(request, pk):
     dic1 = {}
     data_num = []
@@ -159,6 +148,14 @@ def examen_cliente(request, pk):
                     continue
         else:
             pass
+
     context = {'id':id, 'cliente': cliente_datos, 'data_num': data_num , 'examen': examen }
     return render(request, 'clinica_fenix_01/render_cliente.html', context)
+
+
+class Registro(generic.CreateView):
+
+    form_class = UserCreationForm
+    template_name= "clinica_fenix_01/registro.html"
+    success_url = reverse_lazy('clinica_fenix_01:index')
 
